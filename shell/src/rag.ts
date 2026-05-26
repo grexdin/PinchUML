@@ -23,17 +23,17 @@ const STOP_WORDS = new Set([
 // corresponding doc's score by the multiplier. This prevents TF-IDF
 // from retrieving irrelevant docs (e.g., YAML docs for a deployment query).
 const BOOSTS: Record<string, { terms: string[]; multiplier: number }> = {
-  'deployment-diagram': { terms: ['deploy', 'zone', 'server', 'node', 'infrastructure', 'host', 'cdn', 'availability', 'replica', 'cluster', 'database', 'load balancer'], multiplier: 2.0 },
-  'sequence-diagram': { terms: ['sequence', 'message', 'login', 'auth', 'authenticate', 'api', 'call', 'request', 'response', 'return', 'session', 'token', 'jwt', 'credential'], multiplier: 2.0 },
-  'class-diagram': { terms: ['class', 'domain model', 'entity', 'attribute', 'method', 'inherit', 'abstract', 'relation', 'object', 'interface', 'getter', 'setter'], multiplier: 2.0 },
-  'component-diagram': { terms: ['component', 'service', 'topology', 'microservice', 'architecture', 'module', 'dependency', 'system design', 'integration'], multiplier: 2.0 },
-  'activity-diagram': { terms: ['activity', 'workflow', 'process', 'pipeline', 'checkout', 'step', 'flow', 'decision', 'branch', 'approval'], multiplier: 2.0 },
-  'state-diagram': { terms: ['state', 'lifecycle', 'transition', 'status', 'event', 'idle', 'active'], multiplier: 2.0 },
-  'use-case-diagram': { terms: ['actor', 'use case', 'usecase'], multiplier: 2.0 },
-  'er-diagram': { terms: ['entity relationship', 'er diagram', 'entity'], multiplier: 2.0 },
-  'mindmap-diagram': { terms: ['mindmap', 'mind map', 'brainstorm'], multiplier: 2.0 },
-  'gantt-diagram': { terms: ['gantt', 'timeline', 'project plan', 'schedule', 'milestone'], multiplier: 2.0 },
-  'timing-diagram': { terms: ['timing', 'time diagram', 'clock', 'signal'], multiplier: 2.0 },
+  'deployment-diagram': { terms: ['deploy', 'zone', 'server', 'node', 'infrastructure', 'host', 'cdn', 'availability', 'replica', 'cluster', 'load balancer'], multiplier: 4.0 },
+  'sequence-diagram': { terms: ['sequence', 'message', 'login', 'auth', 'authenticate', 'call', 'request', 'response', 'return', 'session', 'token', 'jwt', 'credential'], multiplier: 4.0 },
+  'class-diagram': { terms: ['class', 'domain model', 'entity', 'attribute', 'method', 'inherit', 'abstract', 'relation', 'object', 'interface', 'getter', 'setter'], multiplier: 4.0 },
+  'component-diagram': { terms: ['component', 'service', 'topology', 'microservice', 'architecture', 'module', 'dependency', 'system design', 'integration', 'gateway', 'route', 'api', 'database', 'broker', 'queue'], multiplier: 4.0 },
+  'activity-diagram': { terms: ['activity', 'workflow', 'process', 'pipeline', 'checkout', 'step', 'flow', 'decision', 'branch', 'approval'], multiplier: 4.0 },
+  'state-diagram': { terms: ['state', 'lifecycle', 'transition', 'status', 'event', 'idle', 'active'], multiplier: 4.0 },
+  'use-case-diagram': { terms: ['actor', 'use case', 'usecase'], multiplier: 4.0 },
+  'er-diagram': { terms: ['entity relationship', 'er diagram', 'entity'], multiplier: 4.0 },
+  'mindmap-diagram': { terms: ['mindmap', 'mind map', 'brainstorm'], multiplier: 4.0 },
+  'gantt-diagram': { terms: ['gantt', 'timeline', 'project plan', 'schedule', 'milestone'], multiplier: 4.0 },
+  'timing-diagram': { terms: ['timing', 'time diagram', 'clock', 'signal'], multiplier: 4.0 },
 }
 
 function tokenize(text: string): string[] {

@@ -14,23 +14,21 @@ async function loadRenderer(): Promise<TeaVMRenderer> {
 
 function detectRenderError(container: HTMLElement): string | null {
   const svg = container.querySelector('svg')
-  if (!svg) return 'No SVG output produced'
+  if (!svg) return 'Renderer crashed — no output produced'
 
-  const text = svg.textContent || ''
+  // Valid diagrams contain SVG shapes (paths, polygons, ellipses, lines, rects)
+  const hasShapes = svg.querySelector('path, polygon, ellipse, line')
+  if (hasShapes) return null
 
-  // PlantUML errors typically contain "Syntax Error" or "Error:" in the rendered output
-  const syntaxMatch = text.match(/Syntax Error[?:]?\s*(.+?)(?:\n|$)/i)
-  if (syntaxMatch) return syntaxMatch[1].trim() || 'Syntax error in PlantUML code'
-
-  // If there are no diagram shapes, it's likely just an error message
-  const hasShapes = svg.querySelector('path, rect, polygon, ellipse, line, polyline')
-  if (!hasShapes && text.length < 500) {
-    const clean = text.replace(/\s+/g, ' ').trim()
-    if (clean) return clean.slice(0, 300)
-    return 'No diagram elements rendered — possible syntax error'
+  // No shapes → the renderer produced error text instead of a diagram.
+  // PlantUML error messages include the line number and specific issue.
+  const text = (svg.textContent || '').trim()
+  if (text.length > 0) {
+    // Clean up excessive whitespace but preserve the error structure
+    return text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 500)
   }
 
-  return null
+  return 'Renderer produced no output'
 }
 
 interface Props {
@@ -117,7 +115,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
           errorReportedRef.current = plantuml
           onRenderError(plantuml, renderError)
         }
-      }, 100)
+      }, 300)
     }, 50)
 
     return () => clearTimeout(timer)
