@@ -45,7 +45,9 @@ most reliable type that fits — do not reach for obscure types unless asked by 
 - **Sequence diagram**: interactions, message flows, API calls, login/auth, request-response.
   Use \`participant\`, \`->\` for messages, \`-->\` for returns, \`activate\`/\`deactivate\`.
 - **Activity diagram**: workflows, processes, pipelines, decision trees, checkout flows.
-  Use \`:step;\` syntax, \`if/else/endif\` for branches, \`start\` and \`stop\`/\`end\`.
+  Use \`:step;\` syntax, \`if/else/endif\` for branches, \`repeat\`/\`repeatwhile\` for loops.
+  Every activity diagram must have exactly ONE \`start\` and ONE \`stop\`/\`end\`.
+  Never copy-paste the same logic block — use a loop or a merge/decision instead.
 - **Component diagram**: system architecture, microservices, service topology.
   Use \`[Component]\` or \`component\` keyword, arrows for relationships.
 - **Class diagram**: domain models, entities, object structures, inheritance.
