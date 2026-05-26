@@ -65,6 +65,23 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       })
   }, [])
 
+  // Suppress TeaVM's internal $jsException noise — a known null-check bug
+  // in the compiled Java runtime. Errors fire asynchronously from TeaVM's
+  // setTimeout thread, so they bypass our try/catch. The diagram still renders.
+  useEffect(() => {
+    const handler = (e: ErrorEvent) => {
+      if (
+        e.filename?.includes('plantuml.js') &&
+        e.message?.includes('$jsException')
+      ) {
+        e.preventDefault()
+        console.warn('TeaVM internal error suppressed (diagram may still render):', e.message)
+      }
+    }
+    window.addEventListener('error', handler)
+    return () => window.removeEventListener('error', handler)
+  }, [])
+
   // Render when plantuml changes or mode switches back to diagram
   useEffect(() => {
     if (!plantuml || !rendererRef.current) return
