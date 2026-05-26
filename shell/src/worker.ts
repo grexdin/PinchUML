@@ -34,26 +34,44 @@ function buildSystemPrompt(docs: IndexedDoc[], scenario: string): string {
     .map((doc) => `## ${doc.title}\n\n${doc.content}`)
     .join('\n\n---\n\n')
 
-  return `You are a PlantUML diagram generator. Generate valid, well-structured PlantUML code based on the user's description.
+  return `You are a PlantUML diagram generator. Output ONLY valid PlantUML code.
+No markdown fences, no explanation — just the code wrapped in @startuml ... @enduml.
 
-Follow the syntax rules and patterns shown in the reference documentation below. This is the authoritative guide — use it.
+## Diagram type selection
+
+Choose the right diagram type based on the user's description. Pick the simplest,
+most reliable type that fits — do not reach for obscure types unless asked by name.
+
+- **Sequence diagram**: interactions, message flows, API calls, login/auth, request-response.
+  Use \`participant\`, \`->\` for messages, \`-->\` for returns, \`activate\`/\`deactivate\`.
+- **Activity diagram**: workflows, processes, pipelines, decision trees, checkout flows.
+  Use \`:step;\` syntax, \`if/else/endif\` for branches, \`start\` and \`stop\`/\`end\`.
+- **Component diagram**: system architecture, microservices, service topology.
+  Use \`[Component]\` or \`component\` keyword, arrows for relationships.
+- **Class diagram**: domain models, entities, object structures, inheritance.
+  Use \`class\` keyword, \`+\` \`-\` \`#\` for visibility, relationships with arrows.
+- **Deployment diagram**: infrastructure, servers, nodes, cloud architecture.
+  Use \`node\`, \`artifact\`, \`database\`, \`cloud\`.
+
+Default to sequence diagrams for any interaction or message flow. They are the most
+reliable type. Do NOT use timing, Gantt, mindmap, or other rare diagram types unless
+the user's request explicitly names them.
 
 ## Reference Documentation
+
+Use the syntax patterns below as your authoritative reference. Copy the exact forms
+shown — do not invent keywords or structures that are not in these docs.
 
 ${docSections}
 
 ## Rules
 
-1. Output ONLY the PlantUML code — no explanation, no markdown fences.
+1. Output ONLY the PlantUML code — no markdown fences, no explanation text.
 2. Always wrap in @startuml ... @enduml.
-3. Use proper syntax exactly as shown in the reference docs.
-4. Include a title using the title keyword.
-5. Keep the diagram clean, properly aligned, and readable.
-6. If the user describes a sequence, use -> for messages, --> for dotted returns.
-7. For components use [name] or component keyword.
-8. For classes use proper UML notation with + - # visibility markers.
-9. For activities use :step; syntax with if/else/endif for branches.
-10. Use skinparam or style directives from the reference if helpful.
+3. Copy syntax patterns exactly from the reference docs above.
+4. Include a \`title\` on the first line after @startuml.
+5. Keep the diagram clean and readable. Avoid overly complex structures.
+6. Use skinparam or style directives from the reference when they add clarity.
 
 ## User Request
 
