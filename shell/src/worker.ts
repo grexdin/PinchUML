@@ -114,7 +114,7 @@ async function callLLM(
           { role: 'user', content: scenario },
         ],
         temperature: 0.2,
-        max_tokens: 4096,
+        max_tokens: 8192,
       }),
       signal: controller.signal,
     })
@@ -172,150 +172,39 @@ async function callLLM(
   }
 }
 
-function buildFixPrompt(
-  scenario: string,
-  plantuml: string,
-  renderError: string,
-): string {
-  return `You generated PlantUML code that has a syntax error. Fix it and output only the corrected code.
-
-Original request: ${scenario}
-
-Your PlantUML code that produced an error:
-\`\`\`plantuml
-${plantuml}
-\`\`\`
-
-Error from the PlantUML renderer:
-${renderError}
-
-Fix the errors and output ONLY the corrected PlantUML code, wrapped in @startuml ... @enduml. Do not include any explanation.`
-}
-
-async function callLLMFix(
-  scenario: string,
-  plantuml: string,
-  renderError: string,
-  connection: ConnectionSettings,
-): Promise<string> {
-  const prompt = buildFixPrompt(scenario, plantuml, renderError)
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 60000)
-
-  try {
-    const response = await fetch(connection.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${connection.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: connection.model,
-        messages: [
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.1,
-        max_tokens: 4096,
-      }),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '')
-      throw new Error(
-        `LLM returned ${response.status} on retry: ${body.slice(0, 200)}`,
-      )
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>
-      error?: { message: string }
-    }
-
-    if (data.error) {
-      throw new Error(`LLM error: ${data.error.message}`)
-    }
-
-    let content = data.choices?.[0]?.message?.content
-    if (!content) {
-      throw new Error('LLM returned empty response on retry')
-    }
-
-    content = content.trim()
-    if (content.startsWith('```')) {
-      content = content
-        .replace(/^```[\w]*\n?/i, '')
-        .replace(/\n?```$/i, '')
-        .trim()
-    }
-
-    if (!content.startsWith('@startuml')) {
-      content = `@startuml\n${content}`
-    }
-    if (!content.endsWith('@enduml')) {
-      content = `${content}\n@enduml`
-    }
-
-    return content
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
 self.onmessage = async (event: MessageEvent) => {
-  const { kind, scenario, connection, plantuml, renderError } = event.data
+  const { kind, scenario, connection } = event.data
 
-  if (kind === 'retry') {
-    if (!plantuml || !renderError || !connection?.endpoint || !connection?.apiKey) {
+  // Both 'generate' and 'retry' run the full RAG pipeline fresh.
+  // A retry is just another attempt from scratch — the LLM gets a
+  // different random seed and may produce correct output on the second try.
+  if (kind === 'generate' || kind === 'retry') {
+    if (!scenario || !connection?.endpoint || !connection?.apiKey || !connection?.model) {
       const reply: WorkerReply = {
         kind: 'error',
-        message: 'Missing data for retry',
+        message: 'Missing scenario, endpoint, API key, or model',
       }
       self.postMessage(reply)
       return
     }
 
     try {
-      const fixed = await callLLMFix(scenario, plantuml, renderError, connection)
-      const reply: WorkerReply = { kind: 'result', plantuml: fixed }
+      const index = await loadIndex()
+      const result = await callLLM(scenario, connection, index)
+      const reply: WorkerReply = { kind: 'result', plantuml: result }
       self.postMessage(reply)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      let message: string
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        message = 'Network error — check your endpoint URL and that the server allows cross-origin requests (CORS)'
+      } else if (err instanceof DOMException && err.name === 'AbortError') {
+        message = 'Request timed out after 60 seconds'
+      } else {
+        message = err instanceof Error ? err.message : String(err)
+      }
       const reply: WorkerReply = { kind: 'error', message }
       self.postMessage(reply)
     }
     return
-  }
-
-  if (kind !== 'generate') {
-    return
-  }
-
-  if (!scenario || !connection?.endpoint || !connection?.apiKey || !connection?.model) {
-    const reply: WorkerReply = {
-      kind: 'error',
-      message: 'Missing scenario, endpoint, API key, or model',
-    }
-    self.postMessage(reply)
-    return
-  }
-
-  try {
-    const index = await loadIndex()
-    const result = await callLLM(scenario, connection, index)
-    const reply: WorkerReply = { kind: 'result', plantuml: result }
-    self.postMessage(reply)
-  } catch (err) {
-    let message: string
-    if (err instanceof TypeError && err.message.includes('fetch')) {
-      message = 'Network error — check your endpoint URL and that the server allows cross-origin requests (CORS)'
-    } else if (err instanceof DOMException && err.name === 'AbortError') {
-      message = 'Request timed out after 60 seconds'
-    } else {
-      message = err instanceof Error ? err.message : String(err)
-    }
-    const reply: WorkerReply = { kind: 'error', message }
-    self.postMessage(reply)
   }
 }

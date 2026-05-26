@@ -124,8 +124,6 @@ export default function App() {
     getWorker().postMessage({
       kind: 'retry',
       scenario: prompt.trim(),
-      plantuml: plantumlCode,
-      renderError,
       connection,
     })
   }, [prompt, connection, getWorker, listenOnce])

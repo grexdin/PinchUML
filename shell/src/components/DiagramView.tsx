@@ -146,7 +146,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       <div className="diagram-panel">
         <div className="diagram-status">
           <div className="spinner" />
-          <span>{retrying ? 'Fixing syntax error…' : 'Generating diagram…'}</span>
+          <span>{retrying ? 'Retrying…' : 'Generating diagram…'}</span>
         </div>
       </div>
     )

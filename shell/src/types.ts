@@ -24,16 +24,8 @@ export interface EmbeddingIndex {
 }
 
 export interface WorkerRequest {
-  kind: 'generate'
+  kind: 'generate' | 'retry'
   scenario: string
-  connection: ConnectionSettings
-}
-
-export interface WorkerRetryRequest {
-  kind: 'retry'
-  scenario: string
-  plantuml: string
-  renderError: string
   connection: ConnectionSettings
 }
 
@@ -47,5 +39,5 @@ export interface WorkerError {
   message: string
 }
 
-export type WorkerMessage = WorkerRequest | WorkerRetryRequest
+export type WorkerMessage = WorkerRequest
 export type WorkerReply = WorkerResponse | WorkerError
