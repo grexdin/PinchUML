@@ -3,8 +3,8 @@ import type { EmbeddingIndex, IndexedDoc } from './types'
 /**
  * Retrieve the most relevant PlantUML syntax documents for a user scenario.
  *
- * Uses TF-IDF cosine similarity with keyword-based score boosting
- * to ensure the right diagram-type docs rank highest.
+ * Uses TF-IDF cosine similarity with keyword-based score boosting and
+ * force-include to ensure the right diagram-type docs rank highest.
  * Designed to run inside a Web Worker — no DOM or network access needed.
  */
 
@@ -20,20 +20,22 @@ const STOP_WORDS = new Set([
 ])
 
 // Keyword boosts: if the query contains any of these terms, boost the
-// corresponding doc's score by the multiplier. This prevents TF-IDF
-// from retrieving irrelevant docs (e.g., YAML docs for a deployment query).
+// corresponding doc's score. Keys must match the document IDs (the
+// basename of each .md file in mind/memory/ without the extension).
 const BOOSTS: Record<string, { terms: string[]; multiplier: number }> = {
-  'deployment-diagram': { terms: ['deploy', 'zone', 'server', 'node', 'infrastructure', 'host', 'cdn', 'availability', 'replica', 'cluster', 'load balancer'], multiplier: 4.0 },
-  'sequence-diagram': { terms: ['sequence', 'message', 'login', 'auth', 'authenticate', 'call', 'request', 'response', 'return', 'session', 'token', 'jwt', 'credential'], multiplier: 4.0 },
-  'class-diagram': { terms: ['class', 'domain model', 'entity', 'attribute', 'method', 'inherit', 'abstract', 'relation', 'object', 'interface', 'getter', 'setter'], multiplier: 4.0 },
+  'sequence-diagram': { terms: ['sequence', 'message', 'login', 'auth', 'authenticate', 'call', 'request', 'response', 'return', 'session', 'token', 'jwt', 'credential', 'participant'], multiplier: 4.0 },
+  'activity-diagram-beta': { terms: ['activity', 'workflow', 'process', 'pipeline', 'checkout', 'step', 'flow', 'decision', 'branch', 'approval', 'ci/cd', 'deploy', 'build', 'test', 'stage', 'release'], multiplier: 4.0 },
   'component-diagram': { terms: ['component', 'service', 'topology', 'microservice', 'architecture', 'module', 'dependency', 'system design', 'integration', 'gateway', 'route', 'api', 'database', 'broker', 'queue'], multiplier: 4.0 },
-  'activity-diagram': { terms: ['activity', 'workflow', 'process', 'pipeline', 'checkout', 'step', 'flow', 'decision', 'branch', 'approval'], multiplier: 4.0 },
+  'class-diagram': { terms: ['class', 'domain model', 'entity', 'attribute', 'method', 'inherit', 'abstract', 'relation', 'object', 'interface', 'getter', 'setter'], multiplier: 4.0 },
+  'deployment-diagram': { terms: ['deploy', 'zone', 'server', 'node', 'infrastructure', 'host', 'cdn', 'availability', 'replica', 'cluster', 'load balancer'], multiplier: 4.0 },
   'state-diagram': { terms: ['state', 'lifecycle', 'transition', 'status', 'event', 'idle', 'active'], multiplier: 4.0 },
   'use-case-diagram': { terms: ['actor', 'use case', 'usecase'], multiplier: 4.0 },
-  'er-diagram': { terms: ['entity relationship', 'er diagram', 'entity'], multiplier: 4.0 },
-  'mindmap-diagram': { terms: ['mindmap', 'mind map', 'brainstorm'], multiplier: 4.0 },
+  'er-diagram': { terms: ['entity relationship', 'er diagram'], multiplier: 4.0 },
   'gantt-diagram': { terms: ['gantt', 'timeline', 'project plan', 'schedule', 'milestone'], multiplier: 4.0 },
+  'mindmap-diagram': { terms: ['mindmap', 'mind map', 'brainstorm'], multiplier: 4.0 },
   'timing-diagram': { terms: ['timing', 'time diagram', 'clock', 'signal'], multiplier: 4.0 },
+  'object-diagram': { terms: ['object diagram', 'instance', 'snapshot'], multiplier: 4.0 },
+  'archimate-diagram': { terms: ['archimate', 'enterprise architecture'], multiplier: 4.0 },
 }
 
 function tokenize(text: string): string[] {
@@ -101,20 +103,45 @@ export function retrieve(
 
   const queryLower = scenario.toLowerCase()
 
+  // Score all docs with TF-IDF × keyword boost
   const scored = docs.map((doc) => {
     const baseScore = dot(queryVec, doc.vector) / (queryNorm * norm(doc.vector))
     const boost = computeBoost(doc.id, queryLower)
-    return { doc, score: baseScore * boost }
+    return { doc, score: baseScore * boost, boosted: boost > 1.0 }
   })
 
   scored.sort((a, b) => b.score - a.score)
 
-  const debug = scored.slice(0, topK).map(
-    (s) => `${s.doc.title} (${s.score.toFixed(3)})`,
+  // Force-include: if a keyword-matched doc didn't make the top K,
+  // replace the lowest-ranked non-boosted doc with it
+  const boostedIds = new Set(
+    scored.filter((s) => s.boosted).map((s) => s.doc.id),
+  )
+
+  const result = scored.slice(0, topK)
+  const resultIds = new Set(result.map((s) => s.doc.id))
+
+  for (const bid of boostedIds) {
+    if (resultIds.has(bid)) continue
+    // Find the lowest-ranked non-boosted doc to replace
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (!boostedIds.has(result[i].doc.id)) {
+        const replacement = scored.find((s) => s.doc.id === bid)
+        if (replacement) {
+          result[i] = replacement
+          resultIds.add(bid)
+        }
+        break
+      }
+    }
+  }
+
+  const debug = result.map(
+    (s) => `${s.doc.title} (${s.score.toFixed(3)}${s.boosted ? ' ★' : ''})`,
   )
 
   return {
-    docs: scored.slice(0, topK).map((s) => s.doc),
+    docs: result.map((s) => s.doc),
     debug,
   }
 }

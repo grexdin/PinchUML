@@ -53,6 +53,7 @@ most reliable type that fits — do not reach for obscure types unless asked by 
   Use \`participant\`, \`->\` for messages, \`-->\` for returns, \`activate\`/\`deactivate\`.
 - **Activity diagram**: workflows, processes, pipelines, decision trees, checkout flows.
   Use \`:step;\` syntax, \`if/else/endif\` for branches, \`repeat\`/\`repeatwhile\` for loops.
+  Start with \`start\` and end with \`stop\` (or \`end\`). Never use \`(*)\` — that is legacy syntax.
   Every activity diagram must have exactly ONE \`start\` and ONE \`stop\`/\`end\`.
   Never copy-paste the same logic block — use a loop or a merge/decision instead.
 - **Component diagram**: system architecture, microservices, service topology.
