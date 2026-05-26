@@ -311,6 +311,15 @@
   font-size: 14px;
 }
 
+/* Server render note */
+.server-render-note {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-bottom: 1px solid var(--border);
+}
+
 /* Spinner */
 .spinner {
   width: 24px;
