@@ -1,0 +1,3 @@
+- Prefers atomic, single-purpose git commits.
+- Do not bump major dependency versions in `package.json` without asking first.
+- Keep the component structure flat unless the project grows significantly.
