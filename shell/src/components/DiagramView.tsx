@@ -49,6 +49,12 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
   const renderedRef = useRef('')
   const preloadStarted = useRef(false)
   const errorReportedRef = useRef('')
+  const plantumlRef = useRef(plantuml)
+  const onRenderErrorRef = useRef(onRenderError)
+
+  // Keep refs in sync
+  useEffect(() => { plantumlRef.current = plantuml }, [plantuml])
+  useEffect(() => { onRenderErrorRef.current = onRenderError }, [onRenderError])
 
   // Preload the TeaVM renderer module on mount
   useEffect(() => {
@@ -63,9 +69,9 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       })
   }, [])
 
-  // Suppress TeaVM's internal $jsException noise — a known null-check bug
-  // in the compiled Java runtime. Errors fire asynchronously from TeaVM's
-  // setTimeout thread, so they bypass our try/catch. The diagram still renders.
+  // Catch TeaVM's internal $jsException crashes and surface them as render errors.
+  // TeaVM fires these asynchronously from its setTimeout thread, so they bypass
+  // our try/catch around the render call.
   useEffect(() => {
     const handler = (e: ErrorEvent) => {
       if (
@@ -73,7 +79,11 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
         e.message?.includes('$jsException')
       ) {
         e.preventDefault()
-        console.warn('TeaVM internal error suppressed (diagram may still render):', e.message)
+        const src = plantumlRef.current
+        if (src && errorReportedRef.current !== src) {
+          errorReportedRef.current = src
+          onRenderErrorRef.current(src, 'Render engine crashed — the PlantUML syntax may be incompatible with this renderer version')
+        }
       }
     }
     window.addEventListener('error', handler)
@@ -104,19 +114,20 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
         return
       }
 
-      // Check for render errors after a short delay to let the SVG settle
+      // Check for render errors after a delay to let TeaVM finish (or crash).
+      // TeaVM renders asynchronously via its own setTimeout thread.
       setTimeout(() => {
         const container = document.getElementById(outputId)
         if (!container) return
-        if (errorReportedRef.current === plantuml) return
+        if (errorReportedRef.current) return // already reported via $jsException handler
 
         const renderError = detectRenderError(container)
         if (renderError) {
           errorReportedRef.current = plantuml
           onRenderError(plantuml, renderError)
         }
-      }, 300)
-    }, 50)
+      }, 500)
+    }, 100)
 
     return () => clearTimeout(timer)
   }, [plantuml, mode, outputId, onRenderError])
