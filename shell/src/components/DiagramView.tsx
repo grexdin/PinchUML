@@ -65,16 +65,18 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       })
   }, [])
 
-  // Render when plantuml changes
+  // Render when plantuml changes or mode switches back to diagram
   useEffect(() => {
     if (!plantuml || !rendererRef.current) return
+    if (mode !== 'diagram') return
 
-    // Skip if already rendered the same source
-    if (plantuml === renderedRef.current && mode === 'diagram') return
+    // Re-render if the output div was recreated (e.g., after Source -> Diagram toggle)
+    const container = document.getElementById(outputId)
+    const needsRender = !container?.querySelector('svg')
+
+    if (!needsRender && plantuml === renderedRef.current) return
     renderedRef.current = plantuml
     errorReportedRef.current = ''
-
-    if (mode !== 'diagram') return
 
     const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
     const lines = plantuml.split('\n')
@@ -91,7 +93,6 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       setTimeout(() => {
         const container = document.getElementById(outputId)
         if (!container) return
-        // Don't double-report the same error
         if (errorReportedRef.current === plantuml) return
 
         const renderError = detectRenderError(container)

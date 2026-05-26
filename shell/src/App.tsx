@@ -109,6 +109,7 @@ export default function App() {
     }
 
     retryCountRef.current++
+    setLoading(true)
     setRetrying(true)
     setPlantuml(null)
     setError(null)
