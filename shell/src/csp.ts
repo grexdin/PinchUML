@@ -10,8 +10,9 @@ const META_ID = 'csp-meta'
 
 const BASE_POLICY = [
   "default-src 'self'",
-  // TeaVM (Java→JS compiler) requires unsafe-eval for dynamic code execution
-  "script-src 'self' 'unsafe-eval'",
+  // TeaVM (Java→JS compiler) requires unsafe-eval (eval/Function)
+  // and unsafe-inline (DOM-injected <script> elements) at runtime
+  "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
