@@ -2,9 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      id="csp-meta"
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; connect-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>pinchuml</title>
+    <meta name="description" content="Generate PlantUML diagrams from plain English. No server, no setup — your API key stays on your machine." />
+    <title>PinchUML — PlantUML diagrams from plain English</title>
   </head>
   <body>
     <div id="root"></div>

@@ -16,7 +16,6 @@ async function loadIndex(): Promise<EmbeddingIndex> {
   if (indexCache) return indexCache
   if (indexLoading) return indexLoading
 
-  // Fetch from origin root — public/ is served at / in both dev and production
   indexLoading = fetch('/embeddings-index.json')
     .then((res) => {
       if (!res.ok) throw new Error(`Failed to load index: ${res.status}`)
@@ -95,8 +94,17 @@ async function callLLM(
 
     if (!response.ok) {
       const body = await response.text().catch(() => '')
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed — check your API key')
+      }
+      if (response.status === 404) {
+        throw new Error('Endpoint not found — check the URL (did you include /v1/chat/completions?)')
+      }
+      if (response.status === 429) {
+        throw new Error('Rate limited — wait a moment and try again')
+      }
       throw new Error(
-        `LLM endpoint returned ${response.status}: ${body.slice(0, 300)}`,
+        `Endpoint returned ${response.status}: ${body.slice(0, 300)}`,
       )
     }
 
@@ -159,7 +167,14 @@ self.onmessage = async (event: MessageEvent) => {
     const reply: WorkerReply = { kind: 'result', plantuml }
     self.postMessage(reply)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    let message: string
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      message = 'Network error — check your endpoint URL and that the server allows cross-origin requests (CORS)'
+    } else if (err instanceof DOMException && err.name === 'AbortError') {
+      message = 'Request timed out after 60 seconds'
+    } else {
+      message = err instanceof Error ? err.message : String(err)
+    }
     const reply: WorkerReply = { kind: 'error', message }
     self.postMessage(reply)
   }

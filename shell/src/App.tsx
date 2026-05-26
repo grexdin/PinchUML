@@ -114,6 +114,14 @@ export default function App() {
 
         <DemoTiles onSelect={handleDemoSelect} />
 
+        {!isConfigured && (
+          <div className="config-notice">
+            Configure your endpoint URL and API key in the{' '}
+            <strong>Connection</strong> panel above to get started.
+            Your key stays in a Web Worker and never touches a server but yours.
+          </div>
+        )}
+
         <PromptInput
           value={prompt}
           onChange={setPrompt}
