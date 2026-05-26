@@ -113,10 +113,18 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
     const lines = plantuml.split('\n')
     rendererRef.current(lines, tmpId, { dark: false })
 
-    // Wait for TeaVM to render
-    await new Promise(r => setTimeout(r, 300))
+    // Poll until TeaVM produces SVG (max 3 seconds)
+    const svg = await new Promise<SVGElement | null>((resolve) => {
+      const start = Date.now()
+      const poll = () => {
+        const s = tmpDiv.querySelector('svg')
+        if (s) return resolve(s)
+        if (Date.now() - start > 3000) return resolve(null)
+        setTimeout(poll, 50)
+      }
+      poll()
+    })
 
-    const svg = tmpDiv.querySelector('svg')
     if (!svg) { document.body.removeChild(tmpDiv); return }
 
     const viewBox = svg.getAttribute('viewBox') || '0 0 800 400'
