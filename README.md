@@ -12,9 +12,11 @@ PinchUML solves this by mechanically routing the right reference material into t
 
 This project is also about something broader. AI is practical now in a way it wasn't even a year ago. The tools exist for anyone to build things that would have taken entire teams. The limiting factor is no longer technical capability — it is the ability to spot a real problem, understand the domain, and build a focused solution around it. PinchUML is that process applied to one concrete friction point.
 
-![PinchUML demo — sequence diagram generation](pinchDemo.png)
+## Samples
 
-![PinchUML demo — component diagram export](pinchDemo2.png)
+| | |
+|---|---|
+| ![PinchUML generating a diagram from a plain-English scenario](pinchDemo.png) | ![PinchUML rendered diagram with export options](pinchDemo2.png) |
 
 ---
 
