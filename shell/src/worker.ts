@@ -29,9 +29,16 @@ async function loadIndex(): Promise<EmbeddingIndex> {
   return indexLoading
 }
 
+// Trim doc content to keep the prompt focused. The first portion of each
+// reference doc contains the most important syntax patterns and examples.
+function trimContent(content: string, maxLen = 2000): string {
+  if (content.length <= maxLen) return content
+  return content.slice(0, maxLen) + '\n\n[...truncated]'
+}
+
 function buildSystemPrompt(docs: IndexedDoc[], scenario: string): string {
   const docSections = docs
-    .map((doc) => `## ${doc.title}\n\n${doc.content}`)
+    .map((doc) => `## ${doc.title}\n\n${trimContent(doc.content)}`)
     .join('\n\n---\n\n')
 
   return `You are a PlantUML diagram generator. Output ONLY valid PlantUML code.
@@ -87,7 +94,7 @@ async function callLLM(
   connection: ConnectionSettings,
   index: EmbeddingIndex,
 ): Promise<string> {
-  const { docs } = retrieve(index, scenario, 3)
+  const { docs } = retrieve(index, scenario, 5)
   const systemPrompt = buildSystemPrompt(docs, scenario)
 
   const controller = new AbortController()

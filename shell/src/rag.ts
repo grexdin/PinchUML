@@ -3,7 +3,8 @@ import type { EmbeddingIndex, IndexedDoc } from './types'
 /**
  * Retrieve the most relevant PlantUML syntax documents for a user scenario.
  *
- * Uses TF-IDF cosine similarity against a precomputed corpus index.
+ * Uses TF-IDF cosine similarity with keyword-based score boosting
+ * to ensure the right diagram-type docs rank highest.
  * Designed to run inside a Web Worker — no DOM or network access needed.
  */
 
@@ -17,6 +18,23 @@ const STOP_WORDS = new Set([
   'about', 'above', 'after', 'again', 'all', 'also', 'any', 'as',
   'because', 'before', 'between', 'both',
 ])
+
+// Keyword boosts: if the query contains any of these terms, boost the
+// corresponding doc's score by the multiplier. This prevents TF-IDF
+// from retrieving irrelevant docs (e.g., YAML docs for a deployment query).
+const BOOSTS: Record<string, { terms: string[]; multiplier: number }> = {
+  'deployment-diagram': { terms: ['deploy', 'zone', 'server', 'node', 'infrastructure', 'host', 'cdn', 'availability', 'replica', 'cluster', 'database', 'load balancer'], multiplier: 2.0 },
+  'sequence-diagram': { terms: ['sequence', 'message', 'login', 'auth', 'authenticate', 'api', 'call', 'request', 'response', 'return', 'session', 'token', 'jwt', 'credential'], multiplier: 2.0 },
+  'class-diagram': { terms: ['class', 'domain model', 'entity', 'attribute', 'method', 'inherit', 'abstract', 'relation', 'object', 'interface', 'getter', 'setter'], multiplier: 2.0 },
+  'component-diagram': { terms: ['component', 'service', 'topology', 'microservice', 'architecture', 'module', 'dependency', 'system design', 'integration'], multiplier: 2.0 },
+  'activity-diagram': { terms: ['activity', 'workflow', 'process', 'pipeline', 'checkout', 'step', 'flow', 'decision', 'branch', 'approval'], multiplier: 2.0 },
+  'state-diagram': { terms: ['state', 'lifecycle', 'transition', 'status', 'event', 'idle', 'active'], multiplier: 2.0 },
+  'use-case-diagram': { terms: ['actor', 'use case', 'usecase'], multiplier: 2.0 },
+  'er-diagram': { terms: ['entity relationship', 'er diagram', 'entity'], multiplier: 2.0 },
+  'mindmap-diagram': { terms: ['mindmap', 'mind map', 'brainstorm'], multiplier: 2.0 },
+  'gantt-diagram': { terms: ['gantt', 'timeline', 'project plan', 'schedule', 'milestone'], multiplier: 2.0 },
+  'timing-diagram': { terms: ['timing', 'time diagram', 'clock', 'signal'], multiplier: 2.0 },
+}
 
 function tokenize(text: string): string[] {
   return text
@@ -41,21 +59,31 @@ function norm(v: number[]): number {
   return Math.sqrt(sum)
 }
 
+function computeBoost(docId: string, queryLower: string): number {
+  const config = BOOSTS[docId]
+  if (!config) return 1.0
+
+  for (const term of config.terms) {
+    if (queryLower.includes(term)) {
+      return config.multiplier
+    }
+  }
+  return 1.0
+}
+
 export function retrieve(
   index: EmbeddingIndex,
   scenario: string,
-  topK: number = 3,
+  topK: number = 5,
 ): { docs: IndexedDoc[]; debug: string[] } {
   const { vocabulary, idf, docs } = index
 
-  // Tokenize and build query TF vector
   const queryTokens = tokenize(scenario)
   const queryTf = new Map<string, number>()
   for (const t of queryTokens) {
     queryTf.set(t, (queryTf.get(t) || 0) + 1)
   }
 
-  // Build query TF-IDF vector
   const queryVec = new Array(vocabulary.length).fill(0)
   for (let i = 0; i < vocabulary.length; i++) {
     const term = vocabulary[i]
@@ -65,22 +93,22 @@ export function retrieve(
 
   const queryNorm = norm(queryVec)
   if (queryNorm === 0) {
-    // No matching terms — fall back to first N docs
     return {
       docs: docs.slice(0, topK),
       debug: ['No matching vocabulary terms'],
     }
   }
 
-  // Cosine similarity against each doc
-  const scored = docs.map((doc) => ({
-    doc,
-    score: dot(queryVec, doc.vector) / (queryNorm * norm(doc.vector)),
-  }))
+  const queryLower = scenario.toLowerCase()
+
+  const scored = docs.map((doc) => {
+    const baseScore = dot(queryVec, doc.vector) / (queryNorm * norm(doc.vector))
+    const boost = computeBoost(doc.id, queryLower)
+    return { doc, score: baseScore * boost }
+  })
 
   scored.sort((a, b) => b.score - a.score)
 
-  // Debug info for panel
   const debug = scored.slice(0, topK).map(
     (s) => `${s.doc.title} (${s.score.toFixed(3)})`,
   )
