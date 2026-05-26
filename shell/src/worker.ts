@@ -16,7 +16,7 @@ async function loadIndex(): Promise<EmbeddingIndex> {
   if (indexCache) return indexCache
   if (indexLoading) return indexLoading
 
-  indexLoading = fetch('/embeddings-index.json')
+  indexLoading = fetch(import.meta.env.BASE_URL + 'embeddings-index.json')
     .then((res) => {
       if (!res.ok) throw new Error(`Failed to load index: ${res.status}`)
       return res.json() as Promise<EmbeddingIndex>

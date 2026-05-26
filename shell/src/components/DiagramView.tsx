@@ -5,7 +5,7 @@ interface TeaVMRenderer {
 }
 
 async function loadRenderer(): Promise<TeaVMRenderer> {
-  const url = self.location.origin + '/teavm/js/plantuml.js'
+  const url = import.meta.env.BASE_URL + 'teavm/js/plantuml.js'
   return import(/* @vite-ignore */ url)
 }
 
