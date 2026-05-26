@@ -239,6 +239,11 @@
   }
 }
 
+.export-btn {
+  margin-left: 4px;
+  font-weight: 500;
+}
+
 .diagram-output {
   padding: 16px;
   overflow-x: auto;

@@ -93,10 +93,19 @@ pinchuml/
 | 2026-05-26 | UI components — all four + TeaVM rendering | `feat/app-ui` |
 | 2026-05-26 | Security — CSP, dynamic endpoint allowlisting, validation | `feat/security` |
 | 2026-05-26 | Fix: Vite public/ import in dev mode | `fix/public-import` |
-| 2026-05-26 | Auto-retry on render errors (max 2, T=0.1) | `feat/retry-on-error` |
-| 2026-05-26 | Fix: TeaVM needs unsafe-eval in CSP | `fix/csp-teavm` |
-| 2026-05-26 | Fix: TeaVM needs unsafe-inline in CSP | `fix/csp-inline` |
+| 2026-05-26 | Auto-retry on render errors (max 2, fresh generation) | `feat/retry-on-error` |
+| 2026-05-26 | Fix: TeaVM needs unsafe-eval + unsafe-inline in CSP | `fix/csp-teavm`, `fix/csp-inline` |
 | 2026-05-26 | Fix: toggle preserves SVG, retry shows spinner | `fix/toggle-and-retry-ui` |
+| 2026-05-26 | Tightened system prompt — diagram type selection guide | `fix/tighten-prompt` |
+| 2026-05-26 | Activity diagram prompt — single start/stop, no duplication | `fix/activity-prompt` |
+| 2026-05-26 | Keyword-boosted retrieval with penalties + force-include | `fix/retrieval-boosting` |
+| 2026-05-26 | Surface full PlantUML error text + stronger boosts | `fix/error-detection-boost` |
+| 2026-05-26 | Boost keys matched to actual doc filenames | `fix/boost-keys` |
+| 2026-05-26 | Wire TeaVM $jsException crashes into retry flow | `fix/teavm-crash-detection` |
+| 2026-05-26 | Simpler demos, 8K token budget | `fix/demos-retry-tokens` |
+| 2026-05-26 | Test harness + penalty system for RAG retrieval | `feat/debug-panel` |
+| 2026-05-26 | Fix: TeaVM needs viz-global.js (Graphviz) for all diagram types | `fix/isolate-teavm-crash` |
+| 2026-05-26 | PNG export — 3x canvas render, one-click download | `feat/png-export` |
 
 ---
 

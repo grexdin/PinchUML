@@ -146,6 +146,53 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
     return () => clearTimeout(timer)
   }, [plantuml, mode, outputId, onRenderError])
 
+  const handleExportPng = useCallback(async () => {
+    const container = document.getElementById(outputId)
+    const svg = container?.querySelector('svg')
+    if (!svg) return
+
+    // Clone the SVG and set explicit dimensions from viewBox for high-res export
+    const clone = svg.cloneNode(true) as SVGElement
+    const viewBox = svg.getAttribute('viewBox') || '0 0 800 400'
+    const [, , vbW, vbH] = viewBox.split(/\s+/).map(Number)
+    const scale = 3 // 3x for crisp PNG at retina resolutions
+    const w = vbW * scale
+    const h = vbH * scale
+
+    clone.setAttribute('width', String(w))
+    clone.setAttribute('height', String(h))
+
+    const svgStr = new XMLSerializer().serializeToString(clone)
+    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      // White background for PNG
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, w, h)
+      ctx.drawImage(img, 0, 0, w, h)
+      URL.revokeObjectURL(url)
+
+      canvas.toBlob((pngBlob) => {
+        if (!pngBlob) return
+        const downloadUrl = URL.createObjectURL(pngBlob)
+        const a = document.createElement('a')
+        a.href = downloadUrl
+        a.download = 'pinchuml-export.png'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(downloadUrl)
+      }, 'image/png')
+    }
+    img.src = url
+  }, [outputId])
+
   const handleCopy = useCallback(async () => {
     if (!plantuml) return
     try {
@@ -207,6 +254,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
           <button type="button" className={mode === 'source' ? 'active' : ''} onClick={() => setMode('source')}>Source</button>
         </div>
         <button type="button" className="copy-btn" onClick={handleCopy}>{copied ? 'Copied!' : 'Copy'}</button>
+        <button type="button" className="copy-btn export-btn" onClick={handleExportPng}>Export PNG</button>
       </div>
 
       {mode === 'diagram' ? (
