@@ -27,7 +27,6 @@ export interface WorkerRequest {
   kind: 'generate'
   scenario: string
   connection: ConnectionSettings
-  index: EmbeddingIndex
 }
 
 export interface WorkerResponse {
