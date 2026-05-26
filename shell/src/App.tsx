@@ -1,63 +1,133 @@
-import { demos } from './demos'
-import type { DemoScenario } from './types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ConnectionSettings, DemoScenario, WorkerReply } from './types'
+import { ConnectionPanel } from './components/ConnectionPanel'
+import { DemoTiles } from './components/DemoTiles'
+import { PromptInput } from './components/PromptInput'
+import { DiagramView } from './components/DiagramView'
 import './App.css'
 
-function App() {
+const STORAGE_KEY = 'pinchuml-connection'
+
+function loadSettings(): ConnectionSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ConnectionSettings
+  } catch { /* corrupted */ }
+  return { endpoint: '', apiKey: '', model: 'gpt-4o' }
+}
+
+function saveSettings(s: ConnectionSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+  } catch { /* quota exceeded */ }
+}
+
+export default function App() {
+  const [connection, setConnection] = useState<ConnectionSettings>(loadSettings)
+  const [prompt, setPrompt] = useState('')
+  const [plantuml, setPlantuml] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const workerRef = useRef<Worker | null>(null)
+
+  // Persist connection settings
+  const handleConnectionChange = useCallback((s: ConnectionSettings) => {
+    setConnection(s)
+    saveSettings(s)
+  }, [])
+
+  // Create worker lazily
+  const getWorker = useCallback(() => {
+    if (!workerRef.current) {
+      workerRef.current = new Worker(
+        new URL('./worker.ts', import.meta.url),
+        { type: 'module' },
+      )
+    }
+    return workerRef.current
+  }, [])
+
+  // Clean up worker on unmount
+  useEffect(() => {
+    return () => {
+      workerRef.current?.terminate()
+    }
+  }, [])
+
+  const handleGenerate = useCallback(() => {
+    const scenario = prompt.trim()
+    if (!scenario) return
+    if (!connection.endpoint || !connection.apiKey) {
+      setError('Please configure your endpoint URL and API key in the Connection panel.')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setPlantuml(null)
+
+    const worker = getWorker()
+
+    const onMessage = (e: MessageEvent<WorkerReply>) => {
+      worker.removeEventListener('message', onMessage)
+
+      if (e.data.kind === 'result') {
+        setPlantuml(e.data.plantuml)
+        setError(null)
+      } else {
+        setError(e.data.message)
+      }
+
+      setLoading(false)
+    }
+
+    worker.addEventListener('message', onMessage)
+    worker.postMessage({
+      kind: 'generate',
+      scenario,
+      connection,
+    })
+  }, [prompt, connection, getWorker])
+
+  const handleDemoSelect = useCallback((demo: DemoScenario) => {
+    setPrompt(demo.prompt)
+    setPlantuml(null)
+    setError(null)
+  }, [])
+
+  const isConfigured = Boolean(connection.endpoint && connection.apiKey)
+
   return (
     <>
       <header className="app-header">
         <h1>PinchUML</h1>
         <span className="subtitle">
-          Generate PlantUML diagrams from plain English. No server, no setup.
+          Generate PlantUML diagrams from plain English
         </span>
       </header>
 
       <main className="app-main">
-        <details className="connection-panel">
-          <summary>Connection</summary>
-          <form className="connection-form" onSubmit={(e) => e.preventDefault()}>
-            <label>
-              Endpoint URL
-              <input type="url" placeholder="https://api.openai.com" />
-            </label>
-            <label>
-              API Key
-              <input type="password" placeholder="sk-..." />
-            </label>
-            <label>
-              Model
-              <input type="text" placeholder="gpt-4o" />
-            </label>
-          </form>
-        </details>
+        <ConnectionPanel
+          settings={connection}
+          onChange={handleConnectionChange}
+        />
 
-        <div className="demos-row">
-          {demos.map((d: DemoScenario) => (
-            <button key={d.label} type="button" className="demo-chip">
-              {d.label}
-            </button>
-          ))}
-        </div>
+        <DemoTiles onSelect={handleDemoSelect} />
 
-        <div className="prompt-area">
-          <textarea
-            className="prompt-input"
-            placeholder="Describe your diagram in plain English..."
-            rows={4}
-          />
-          <button type="button" className="generate-btn">
-            Generate
-          </button>
-        </div>
+        <PromptInput
+          value={prompt}
+          onChange={setPrompt}
+          onGenerate={handleGenerate}
+          loading={loading}
+          disabled={!isConfigured}
+        />
 
-        <div className="diagram-panel">
-          <div id="diagram-output" className="diagram-output">
-            <p className="placeholder">Your diagram will appear here</p>
-          </div>
-        </div>
+        <DiagramView
+          plantuml={plantuml}
+          loading={loading}
+          error={error}
+        />
       </main>
     </>
   )
 }
-
-export default App

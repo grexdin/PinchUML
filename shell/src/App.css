@@ -36,6 +36,18 @@
     cursor: pointer;
     font-weight: 500;
     font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .conn-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 500;
   }
 }
 
@@ -107,10 +119,29 @@
   color: var(--text-h);
   resize: vertical;
   box-sizing: border-box;
+
+  &:focus {
+    border-color: var(--accent-border);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.prompt-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.shortcut-hint {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.5;
 }
 
 .generate-btn {
-  align-self: flex-end;
   padding: 8px 24px;
   font-size: 14px;
   font-weight: 500;
@@ -121,7 +152,7 @@
   cursor: pointer;
   transition: opacity 0.15s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     opacity: 0.85;
   }
 
@@ -131,28 +162,146 @@
   }
 }
 
-/* Diagram output */
+/* Diagram panel */
 .diagram-panel {
   border: 1px solid var(--border);
   border-radius: 8px;
+  overflow: hidden;
   min-height: 200px;
+}
+
+.diagram-toolbar {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+}
+
+.view-tabs {
+  display: flex;
+  gap: 2px;
+
+  button {
+    padding: 4px 12px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+
+    &.active {
+      background: var(--accent-bg);
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    &:hover:not(.active) {
+      background: var(--border);
+    }
+  }
+}
+
+.copy-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--accent-bg);
+  }
 }
 
 .diagram-output {
   padding: 16px;
-  width: 100%;
+  overflow-x: auto;
 
   svg {
     max-width: 100%;
     height: auto;
   }
+}
 
-  .placeholder {
-    color: var(--text);
-    opacity: 0.5;
-    font-size: 14px;
+.diagram-source {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-h);
+  max-height: 500px;
+  overflow-y: auto;
+
+  code {
+    white-space: pre;
+  }
+}
+
+/* Status states */
+.diagram-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 12px;
+  color: var(--text);
+
+  &.error {
+    .error-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    strong {
+      color: var(--text-h);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin: 0;
+      font-size: 14px;
+      max-width: 500px;
+      text-align: center;
+      word-break: break-word;
+    }
+  }
+}
+
+.placeholder {
+  color: var(--text);
+  opacity: 0.5;
+  font-size: 14px;
+}
+
+/* Spinner */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
