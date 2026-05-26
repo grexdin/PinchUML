@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TeaVM Crash Isolation</title>
+<style>
+body { font: 14px/1.5 system-ui; max-width: 900px; margin: 20px auto; background: #111; color: #ddd; }
+h1 { color: #fff; }
+.test { margin: 12px 0; padding: 10px; border: 1px solid #333; border-radius: 6px; }
+.pass { border-color: #2e7d32; background: #1b3320; }
+.fail { border-color: #c62828; background: #3e1a1a; }
+.pending { border-color: #555; }
+summary { cursor: pointer; font-family: monospace; font-size: 13px; }
+pre { font-size: 12px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; }
+code { background: #222; padding: 2px 6px; border-radius: 3px; }
+.out { min-height: 20px; margin-top: 8px; }
+.out svg { max-width: 100%; }
+.status { font-weight: 600; }
+.pass .status { color: #4caf50; }
+.fail .status { color: #ef5350; }
+.pending .status { color: #ffa726; }
+#summary { position: sticky; top: 10px; background: #1a1a1a; padding: 12px 16px; border-radius: 8px; border: 1px solid #444; margin-bottom: 20px; font-size: 15px; }
+</style>
+</head>
+<body>
+<h1>TeaVM Crash Isolation</h1>
+<div id="summary">Loading renderer…</div>
+<div id="tests"></div>
+<script src="./teavm/js/viz-global.js"></script>
+<script type="module">
+import { render } from './teavm/js/plantuml.js'
+
+const tests = [
+  // ---- minimal ----
+  { name: 'minimal sequence', code: '@startuml\nA -> B\n@enduml' },
+  { name: 'with title', code: '@startuml\ntitle Test\nA -> B\n@enduml' },
+  // ---- sequence ----
+  { name: 'participant', code: '@startuml\nparticipant Alice\nparticipant Bob\nAlice -> Bob: Hello\n@enduml' },
+  { name: 'database participant', code: '@startuml\ndatabase DB\nparticipant Svc\nSvc -> DB: query\n@enduml' },
+  { name: 'activate/deactivate', code: '@startuml\nAlice -> Bob: req\nactivate Bob\nBob --> Alice: res\ndeactivate Bob\n@enduml' },
+  // ---- activity ----
+  { name: 'activity start/stop', code: '@startuml\nstart\n:Step 1;\n:Step 2;\nstop\n@enduml' },
+  { name: 'activity if/else', code: '@startuml\nstart\nif (ok?) then (yes)\n  :do it;\nelse (no)\n  :skip;\nendif\nstop\n@enduml' },
+  // ---- component ----
+  { name: 'bracketed component', code: '@startuml\n[API Gateway]\n[User Service]\n[API Gateway] --> [User Service]\n@enduml' },
+  { name: 'component keyword', code: '@startuml\ncomponent "API Gateway"\ncomponent "User Service"\n@enduml' },
+  { name: 'component + database', code: '@startuml\n[API Gateway]\n[User Service]\ndatabase "User DB"\n[User Service] --> [User DB]\n@enduml' },
+  // ---- deployment ----
+  { name: 'bare node', code: '@startuml\nnode "Zone A"\n@enduml' },
+  { name: 'bare database', code: '@startuml\ndatabase "Primary"\n@enduml' },
+  { name: 'node with nested', code: '@startuml\nnode "Zone A" {\n  [Web Server]\n}\n@enduml' },
+  { name: 'node + database', code: '@startuml\nnode "Zone A" {\n  database "DB" as db\n}\n@enduml' },
+  { name: 'deployment full', code: '@startuml\nnode "Zone A" {\n  node "Load Balancer" as lb\n  node "Web Server 1" as ws1\n  node "Web Server 2" as ws2\n  database "Primary DB" as db\n}\n@enduml' },
+  { name: 'deployment with cloud', code: '@startuml\ncloud CDN\nnode "Zone A" {\n  [Web]\n}\nCDN --> [Web]\n@enduml' },
+  // ---- class ----
+  { name: 'bare class', code: '@startuml\nclass User {\n  +name: String\n  +login(): Token\n}\n@enduml' },
+  { name: 'class + relation', code: '@startuml\nclass Patron\nclass Loan\nclass Book\nPatron "1" --> "many" Loan\nLoan --> "1" Book\n@enduml' },
+  // ---- the actual failing diagrams ----
+  { name: 'microservices demo output', code: `@startuml
+title API Gateway Routing Architecture
+[API Gateway] --> [User Service] : Routes requests
+[API Gateway] --> [Order Service] : Routes requests
+[User Service] --> (User Database) : Reads/Writes
+[Order Service] --> (Order Database) : Reads/Writes
+note right of [API Gateway] : Entry point
+@enduml` },
+  { name: 'deployment demo output', code: `@startuml
+title Web App Two Zones
+node "Zone A" {
+  [Load Balancer A]
+  [Web Server A1]
+  [Web Server A2]
+}
+node "Zone B" {
+  [Load Balancer B]
+  [Web Server B1]
+  [Web Server B2]
+}
+database "Primary Database" as DB
+[Load Balancer A] --> [Web Server A1]
+[Web Server A1] --> DB
+@enduml` },
+]
+
+const testsEl = document.getElementById('tests')
+const summaryEl = document.getElementById('summary')
+let pass = 0, fail = 0, pending = tests.length
+
+function updateSummary() {
+  summaryEl.innerHTML = `<span class="status pass">${pass} pass</span> · <span class="status fail">${fail} fail</span> · ${pending} remaining`
+}
+
+for (let i = 0; i < tests.length; i++) {
+  const t = tests[i]
+  const el = document.createElement('div')
+  el.className = 'test pending'
+  el.id = `test-${i}`
+  el.innerHTML = `<details><summary><span class="status">⏳ testing…</span> ${t.name}</summary><pre><code>${t.code.replace(/</g,'&lt;')}</code></pre><div class="out" id="out-${i}"></div></details>`
+  testsEl.appendChild(el)
+}
+
+updateSummary()
+
+// Render each test with a delay between them to let TeaVM settle
+for (let i = 0; i < tests.length; i++) {
+  const t = tests[i]
+  await new Promise(r => setTimeout(r, 300))
+
+  const el = document.getElementById(`test-${i}`)
+  const outId = `out-${i}`
+  const lines = t.code.split('\n')
+
+  try {
+    render(lines, outId)
+  } catch (e) {
+    el.className = 'test fail'
+    el.querySelector('.status').textContent = '✗ crash (sync)'
+    el.querySelector('pre').textContent += '\n\n' + e.message
+    fail++; pending--
+    updateSummary()
+    continue
+  }
+
+  // Wait for async rendering
+  await new Promise(r => setTimeout(r, 500))
+
+  const out = document.getElementById(outId)
+  const svg = out?.querySelector('svg')
+
+  if (svg) {
+    const shapes = svg.querySelector('path, polygon, ellipse, line')
+    if (shapes) {
+      el.className = 'test pass'
+      el.querySelector('.status').textContent = '✓ rendered'
+      pass++; pending--
+    } else {
+      const text = (svg.textContent || '').trim()
+      el.className = 'test fail'
+      el.querySelector('.status').textContent = '✗ error SVG'
+      if (text) el.querySelector('pre').textContent += '\n\nError: ' + text.slice(0, 200)
+      fail++; pending--
+    }
+  } else {
+    el.className = 'test fail'
+    el.querySelector('.status').textContent = '✗ no SVG'
+    fail++; pending--
+  }
+
+  updateSummary()
+}
+
+// Check for any async $jsException errors
+window.addEventListener('error', e => {
+  if (e.message?.includes('$jsException')) {
+    const pre = document.createElement('pre')
+    pre.textContent = 'Async crash: ' + e.message
+    pre.style.color = '#ef5350'
+    document.body.appendChild(pre)
+    e.preventDefault()
+  }
+})
+</script>
+</body>
+</html>
