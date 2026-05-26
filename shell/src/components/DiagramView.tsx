@@ -1,41 +1,17 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
-const KROKI_SVG = 'https://kroki.io/plantuml/svg'
-
 interface TeaVMRenderer {
   render: (lines: string[], elementId: string, options?: { dark?: boolean }) => void
 }
 
-// Try TeaVM first. We construct a full URL dynamically so Vite doesn't try
-// to statically analyze the import (public/ JS cannot be imported in dev).
 async function loadRenderer(): Promise<TeaVMRenderer> {
   const url = self.location.origin + '/teavm/js/plantuml.js'
   return import(/* @vite-ignore */ url)
 }
 
-// Kroki fallback: POST raw PlantUML, get SVG back.
-// Used when TeaVM crashes (produces no SVG at all).
-async function renderViaKroki(plantuml: string, outputId: string): Promise<boolean> {
-  try {
-    const res = await fetch(KROKI_SVG, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: plantuml,
-    })
-    if (!res.ok) return false
-    const svgText = await res.text()
-    const container = document.getElementById(outputId)
-    if (!container) return false
-    container.innerHTML = svgText
-    return true
-  } catch {
-    return false
-  }
-}
-
 function detectRenderError(container: HTMLElement): string | null {
   const svg = container.querySelector('svg')
-  if (!svg) return null // Will trigger fallback, not error
+  if (!svg) return 'No SVG output produced'
   const hasShapes = svg.querySelector('path, polygon, ellipse, line')
   if (hasShapes) return null
   const text = (svg.textContent || '').trim()
@@ -59,7 +35,6 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
   const outputId = useId().replace(/:/g, '')
   const [mode, setMode] = useState<ViewMode>('diagram')
   const [copied, setCopied] = useState(false)
-  const [serverRender, setServerRender] = useState(false)
   const rendererRef = useRef<TeaVMRenderer['render'] | null>(null)
   const renderedRef = useRef('')
   const preloadStarted = useRef(false)
@@ -76,6 +51,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
     loadRenderer().then((mod) => { rendererRef.current = mod.render }).catch(console.error)
   }, [])
 
+  // Catch TeaVM's internal $jsException crashes and surface as render errors
   useEffect(() => {
     const handler = (e: ErrorEvent) => {
       if (e.filename?.includes('plantuml.js') && e.message?.includes('$jsException')) {
@@ -83,7 +59,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
         const src = plantumlRef.current
         if (src && errorReportedRef.current !== src) {
           errorReportedRef.current = src
-          onRenderErrorRef.current(src, 'Render engine crashed — falling back to server renderer')
+          onRenderErrorRef.current(src, 'Render engine crashed')
         }
       }
     }
@@ -91,7 +67,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
     return () => window.removeEventListener('error', handler)
   }, [])
 
-  // Main render effect
+  // Render when plantuml changes or mode switches back to diagram
   useEffect(() => {
     if (!plantuml || !rendererRef.current) return
     if (mode !== 'diagram') return
@@ -102,45 +78,23 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
 
     renderedRef.current = plantuml
     errorReportedRef.current = ''
-    setServerRender(false)
 
     const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
     const lines = plantuml.split('\n')
 
-    // Step 1: try TeaVM
     const timer = setTimeout(() => {
       try { rendererRef.current?.(lines, outputId, { dark }) } catch { /* swallow */ }
 
-      // Step 2: after a delay, check if TeaVM produced anything
-      setTimeout(async () => {
+      setTimeout(() => {
         const container = document.getElementById(outputId)
         if (!container) return
-
-        const hasSvg = container.querySelector('svg')
-
-        if (!hasSvg) {
-          // Step 3: TeaVM produced nothing — try Kroki fallback
-          setServerRender(true)
-          const ok = await renderViaKroki(plantuml, outputId)
-          if (ok) {
-            setServerRender(false)
-            return
-          }
-          // Both renderers failed
-          errorReportedRef.current = plantuml
-          onRenderError(plantuml, 'Both TeaVM and Kroki renderers failed')
-          setServerRender(false)
-          return
-        }
-
-        // TeaVM produced SVG — check for error text
-        if (errorReportedRef.current) return // already reported via $jsException
+        if (errorReportedRef.current) return
         const err = detectRenderError(container)
         if (err) {
           errorReportedRef.current = plantuml
           onRenderError(plantuml, err)
         }
-      }, 600)
+      }, 500)
     }, 100)
 
     return () => clearTimeout(timer)
@@ -151,11 +105,10 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
     const svg = container?.querySelector('svg')
     if (!svg) return
 
-    // Clone the SVG and set explicit dimensions from viewBox for high-res export
     const clone = svg.cloneNode(true) as SVGElement
     const viewBox = svg.getAttribute('viewBox') || '0 0 800 400'
     const [, , vbW, vbH] = viewBox.split(/\s+/).map(Number)
-    const scale = 3 // 3x for crisp PNG at retina resolutions
+    const scale = 3
     const w = vbW * scale
     const h = vbH * scale
 
@@ -172,7 +125,6 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       canvas.width = w
       canvas.height = h
       const ctx = canvas.getContext('2d')!
-      // White background for PNG
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(0, 0, w, h)
       ctx.drawImage(img, 0, 0, w, h)
@@ -258,10 +210,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       </div>
 
       {mode === 'diagram' ? (
-        <div>
-          {serverRender && <div className="server-render-note">Rendering via server…</div>}
-          <div id={outputId} className="diagram-output" />
-        </div>
+        <div id={outputId} className="diagram-output" />
       ) : (
         <pre className="diagram-source"><code>{plantuml}</code></pre>
       )}
