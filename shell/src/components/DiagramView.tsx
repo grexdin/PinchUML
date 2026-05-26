@@ -101,19 +101,34 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
   }, [plantuml, mode, outputId, onRenderError])
 
   const handleExportPng = useCallback(async () => {
-    const container = document.getElementById(outputId)
-    const svg = container?.querySelector('svg')
-    if (!svg) return
+    if (!plantuml || !rendererRef.current) return
 
-    const clone = svg.cloneNode(true) as SVGElement
+    // Render off-screen in light mode for the export, regardless of user's theme
+    const tmpId = `export-${outputId}`
+    const tmpDiv = document.createElement('div')
+    tmpDiv.id = tmpId
+    tmpDiv.style.cssText = 'position:absolute;left:-9999px;top:0'
+    document.body.appendChild(tmpDiv)
+
+    const lines = plantuml.split('\n')
+    rendererRef.current(lines, tmpId, { dark: false })
+
+    // Wait for TeaVM to render
+    await new Promise(r => setTimeout(r, 300))
+
+    const svg = tmpDiv.querySelector('svg')
+    if (!svg) { document.body.removeChild(tmpDiv); return }
+
     const viewBox = svg.getAttribute('viewBox') || '0 0 800 400'
     const [, , vbW, vbH] = viewBox.split(/\s+/).map(Number)
     const scale = 3
     const w = vbW * scale
     const h = vbH * scale
 
+    const clone = svg.cloneNode(true) as SVGElement
     clone.setAttribute('width', String(w))
     clone.setAttribute('height', String(h))
+    document.body.removeChild(tmpDiv)
 
     const svgStr = new XMLSerializer().serializeToString(clone)
     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
@@ -143,7 +158,7 @@ export function DiagramView({ plantuml, loading, error, retrying, onRenderError 
       }, 'image/png')
     }
     img.src = url
-  }, [outputId])
+  }, [plantuml, outputId])
 
   const handleCopy = useCallback(async () => {
     if (!plantuml) return
