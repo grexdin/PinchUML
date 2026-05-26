@@ -12,6 +12,10 @@ PinchUML solves this by mechanically routing the right reference material into t
 
 This project is also about something broader. AI is practical now in a way it wasn't even a year ago. The tools exist for anyone to build things that would have taken entire teams. The limiting factor is no longer technical capability — it is the ability to spot a real problem, understand the domain, and build a focused solution around it. PinchUML is that process applied to one concrete friction point.
 
+![PinchUML demo — sequence diagram generation](pinchDemo.png)
+
+![PinchUML demo — component diagram export](pinchDemo2.png)
+
 ---
 
 ## Architecture
@@ -23,9 +27,10 @@ The webapp ships with the full PlantUML syntax corpus as precomputed embeddings.
 - **Zero-trust.** The API key never lives in main-thread memory. All API calls (retrieval + generation + retry) run inside a Web Worker. No server, except for the end user's endpoint, ever sees it.
 - **BYO-LLM.** Compatible with any OpenAI-style endpoint (Ollama, LM Studio, Groq, etc.).
 - **TF-IDF retrieval.** The shipped index uses keyword-based TF-IDF vectors on a 1,485-term vocabulary across 31 syntax reference documents. Well-suited for a focused domain corpus; semantic embeddings would add complexity without proportional gain at this scale.
-- **Automatic error recovery.** If the LLM produces PlantUML with syntax errors, the rendered SVG is inspected for error indicators, and the bad code + error message is fed back to the LLM for a corrected attempt (up to 2 retries, temperature lowered to 0.1 for fixes).
-- **Static deploy.** Diagram rendering via TeaVM (Java-to-JS compiled PlantUML engine) runs entirely in the browser.
-- **CSP with dynamic endpoint allowlisting.** Starts with `connect-src 'self'` and adds the user's configured LLM endpoint origin at runtime. TeaVM's compiled runtime requires `'unsafe-eval'` and `'unsafe-inline'` in `script-src` — a documented tradeoff of running a JVM in JavaScript.
+- **Automatic error recovery.** The rendered SVG is inspected for diagram elements. Syntax errors trigger a fresh retry (up to 2 attempts) with a different random seed.
+- **TeaVM rendering.** The full PlantUML engine, compiled from Java to JavaScript, runs entirely in the browser. Requires `viz-global.js` (Graphviz) for layout of component, deployment, and class diagrams.
+- **PNG export.** One-click high-resolution export at 3× scale with light-mode rendering, regardless of the user's theme preference.
+- **CSP with dynamic endpoint allowlisting.** Starts with `connect-src 'self'` and adds the user's configured LLM endpoint origin at runtime. TeaVM's compiled runtime requires `'unsafe-eval'` and `'unsafe-inline'` in `script-src`.
 
 ---
 
