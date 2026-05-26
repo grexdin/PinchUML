@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
+interface TeaVMRenderer {
+  render: (lines: string[], elementId: string, options?: { dark?: boolean }) => void
+}
+
+// Dynamic import of public/ asset — resolved at runtime, not bundled
+async function loadRenderer(): Promise<TeaVMRenderer> {
+  // @ts-expect-error public/ asset
+  return import(/* @vite-ignore */ '/teavm/js/plantuml.js')
+}
+
 interface Props {
   plantuml: string | null
   loading: boolean
@@ -20,7 +30,7 @@ export function DiagramView({ plantuml, loading, error }: Props) {
   useEffect(() => {
     if (preloadStarted.current) return
     preloadStarted.current = true
-    import('/teavm/js/plantuml.js')
+    loadRenderer()
       .then((mod) => {
         rendererRef.current = mod.render
       })
