@@ -1,6 +1,6 @@
 # PinchUML
 
-A browser-based PlantUML editor. Open it, point at any OpenAI-compatible LLM endpoint, and generate diagrams from plain-English scenarios. No server, no setup— your API key never touches a backend you don't control.
+A browser-first PlantUML editor. Open it, point at any OpenAI-compatible LLM endpoint, and generate diagrams from plain-English scenarios. No server, no setup — your API key never touches a backend you don't control.
 
 ---
 
@@ -10,7 +10,7 @@ LLMs are capable of generating PlantUML, but without the right syntax context th
 
 PinchUML solves this by mechanically routing the right reference material into the prompt. You type a scenario, the app finds the most relevant syntax docs from the full PlantUML corpus, and feeds them to the LLM as a system prompt. The result: diagrams that are accurate, properly structured, and visually coherent.
 
-This project is also about something broader. AI is practical now in a way it wasn't even a year ago. The tools exist for anyone to build things that would have taken entire teams. The limiting factor is no longer technical capability — it is the ability to spot a real problem, understand the domain, and build a focused solution around it. PinchUML is that process applied to one concrete friction point. The real output is not the code; it is the methodology: identify the gap, understand the domain, build a prototype, iterate.
+This project is also about something broader. AI is practical now in a way it wasn't even a year ago. The tools exist for anyone to build things that would have taken entire teams. The limiting factor is no longer technical capability — it is the ability to spot a real problem, understand the domain, and build a focused solution around it. PinchUML is that process applied to one concrete friction point.
 
 ---
 
@@ -20,11 +20,24 @@ This project is also about something broader. AI is practical now in a way it wa
 
 The webapp ships with the full PlantUML syntax corpus as precomputed embeddings. The user provides only an LLM endpoint URL.
 
-- **Zero-trust.**: The API key never lives in main-thread memory. All API calls (retrieval + generation) run inside a Web Worker. No server, except for the end user's endpoint, ever sees it.
-- **BYO-LLM.**: Compatible with any OpenAI-style endpoint.
-- **Embeddings: TF-IDF, planned semantic.** . A future upgrade will regenerate with `text-embedding-3-small`.
-- **TF-IDF (Term Frequency-Inverse Document Frequency)**: The shipped index uses keyword-based TF-IDF vectors, which works well for a domain-specific corpus
-- **Static deploy.**: Diagram rendering fully in the browser via TeaVM compilation.
+- **Zero-trust.** The API key never lives in main-thread memory. All API calls (retrieval + generation + retry) run inside a Web Worker. No server, except for the end user's endpoint, ever sees it.
+- **BYO-LLM.** Compatible with any OpenAI-style endpoint (Ollama, LM Studio, Groq, etc.).
+- **TF-IDF retrieval.** The shipped index uses keyword-based TF-IDF vectors on a 1,485-term vocabulary across 31 syntax reference documents. Well-suited for a focused domain corpus; semantic embeddings would add complexity without proportional gain at this scale.
+- **Automatic error recovery.** If the LLM produces PlantUML with syntax errors, the rendered SVG is inspected for error indicators, and the bad code + error message is fed back to the LLM for a corrected attempt (up to 2 retries, temperature lowered to 0.1 for fixes).
+- **Static deploy.** Diagram rendering via TeaVM (Java-to-JS compiled PlantUML engine) runs entirely in the browser.
+- **CSP with dynamic endpoint allowlisting.** Starts with `connect-src 'self'` and adds the user's configured LLM endpoint origin at runtime. TeaVM's compiled runtime requires `'unsafe-eval'` and `'unsafe-inline'` in `script-src` — a documented tradeoff of running a JVM in JavaScript.
+
+---
+
+## How it works end-to-end
+
+1. Open the app, enter your LLM endpoint URL + API key + model name.
+2. Type a scenario or click a demo chip: e.g., *"Show a user logging in via an auth service that validates a JWT and queries a database."*
+3. Press Ctrl+Enter.
+4. The Web Worker loads the precomputed TF-IDF index, embeds your scenario, retrieves the top-3 most relevant syntax documents, builds a strict system prompt, and calls your LLM endpoint.
+5. The returned PlantUML code renders as SVG in-browser via the TeaVM engine.
+6. If the renderer detects a syntax error, the code + error is sent back to the LLM for a fix (up to 2 retries). The spinner shows "Fixing syntax error…" during retries.
+7. Toggle between Diagram and Source views. Copy the PlantUML source to clipboard.
 
 ---
 
@@ -32,65 +45,74 @@ The webapp ships with the full PlantUML syntax corpus as precomputed embeddings.
 
 ```
 pinchuml/
-├── shell/                  # The webapp — built and deployed to gh-pages
+├── shell/                       # The webapp
 │   ├── public/
-│   │   ├── plantuml.js    # TeaVM PlantUML → SVG renderer
-│   │   ├── viz-global.js  # Graphviz library
-│   │   ├── *.min.js       # Sprite libraries (IBM, AWS, Azure, etc.)
-│   │   └── embeddings-index.json  # Precomputed TF-IDF vectors
+│   │   ├── teavm/js/
+│   │   │   ├── plantuml.js      # TeaVM PlantUML → SVG renderer (loaded at runtime)
+│   │   │   ├── viz-global.js    # Graphviz library
+│   │   │   └── *.min.js         # Sprite libraries (AWS, Azure, C4, K8s, etc.)
+│   │   ├── embeddings-index.json # Precomputed TF-IDF vectors (482 KB, 31 docs)
+│   │   └── favicon.svg
 │   ├── src/
-│   │   ├── components/    # React components (Header, PromptInput, DiagramView)
-│   │   ├── rag.ts         # RAG pipeline: embed → retrieve → build prompt (fallback)
-│   │   ├── worker.ts      # Web Worker — all API calls run here (key isolation)
-│   │   ├── demos.ts       # Built-in demo scenarios for quick testing
-│   │   ├── App.tsx        # Main orchestrator
-│   │   └── index.css      # Dark/light mode styles
-│   ├── vite.config.ts     # Dev proxy: /v1/* → localhost:18789
-│   ├── index.html
+│   │   ├── components/
+│   │   │   ├── ConnectionPanel.tsx  # Endpoint/API key/model (collapsible, persisted)
+│   │   │   ├── DemoTiles.tsx        # Clickable demo scenario chips
+│   │   │   ├── DiagramView.tsx      # SVG render + source toggle + copy + error detection
+│   │   │   └── PromptInput.tsx      # Textarea with Ctrl+Enter shortcut
+│   │   ├── rag.ts              # TF-IDF retrieval engine (runs in worker)
+│   │   ├── worker.ts           # Web Worker — all API calls + RAG run here
+│   │   ├── csp.ts              # Dynamic CSP management
+│   │   ├── demos.ts            # 6 built-in demo scenarios
+│   │   ├── types.ts            # Shared TypeScript types
+│   │   ├── App.tsx             # State management, worker lifecycle, retry loop
+│   │   ├── App.css             # Component styles
+│   │   ├── index.css           # Global styles + CSS variables (light/dark)
+│   │   └── main.tsx            # Entry point, CSP init
+│   ├── scripts/
+│   │   └── generate-embeddings.mjs  # Build-time TF-IDF indexer
+│   ├── index.html              # CSP meta tag, app shell
+│   ├── vite.config.ts
 │   └── package.json
 │
-└── mind/                  # Developer workspace (not distributed)
+└── mind/                       # Developer workspace (not distributed)
     ├── memory/
-    │   └── *.md           # Preprocessed PlantUML syntax references
-    └── test-pipeline.sh   # Automated curl-based pipeline test
+    │   ├── *.md                # 31 preprocessed PlantUML syntax references (RAG corpus)
+    │   └── 2026-05-26.md       # Session log
+    └── AGENTS.md / SOUL.md / TOOLS.md ...
 ```
-
-### The webapp
-
-A Vite + React + TypeScript single-page PlantUML editor. Bundled assets include:
-
-- **TeaVM renderer**: a Java-to-JS compiled PlantUML engine loaded lazily at runtime. Runs entirely in the browser. Zero server calls for rendering.
-- **Syntax corpus**: precomputed embedding vectors shipped as a static asset.
-- **Connection UI** — collapsible panel for endpoint URL, API key (Web Worker isolated), and model name.
-- **Demo scenarios** — built-in prompts covering sequence, activity, component, and class diagrams.
-- **CSP headers** — Content Security Policy meta tag restricts connect-src, script-src, and worker-src.
-
-### `mind/` — developer workspace
-
-TODO (this section covers the use of openclaw for agentic development
 
 ---
 
-## How it works end-to-end
+## Timeline
 
-### For the user
+| Date | Change | Branch |
+|---|---|---|
+| 2026-05-26 | Project setup — scaffold, types, demos, layout | `feat/project-setup` |
+| 2026-05-26 | RAG pipeline — TF-IDF indexer + retrieval engine | `feat/rag-pipeline` |
+| 2026-05-26 | Web Worker — API key isolation | `feat/web-worker` |
+| 2026-05-26 | UI components — all four + TeaVM rendering | `feat/app-ui` |
+| 2026-05-26 | Security — CSP, dynamic endpoint allowlisting, validation | `feat/security` |
+| 2026-05-26 | Fix: Vite public/ import in dev mode | `fix/public-import` |
+| 2026-05-26 | Auto-retry on render errors (max 2, T=0.1) | `feat/retry-on-error` |
+| 2026-05-26 | Fix: TeaVM needs unsafe-eval in CSP | `fix/csp-teavm` |
+| 2026-05-26 | Fix: TeaVM needs unsafe-inline in CSP | `fix/csp-inline` |
+| 2026-05-26 | Fix: toggle preserves SVG, retry shows spinner | `fix/toggle-and-retry-ui` |
 
-1. Open the app in a browser.
-2. Enter an OpenAI-compatible endpoint URL and API key.
-3. Pick a model name.
-4. Type a scenario in plain English: *"Show a user logging in, the auth service validates JWT, and the API returns user data."* — or click a demo chip.
-5. Press Ctrl+Enter or click Generate.
-6. The app retrieves the most relevant syntax docs, builds a strict system prompt, and sends it to the LLM.
-7. The returned PlantUML code is rendered as SVG in-browser via the TeaVM engine. Copy, save, or edit the diagram.
+---
 
-### Under the hood
+## Development
 
-Steps 1–4 run inside a **Web Worker** so the API key never touches main-thread memory. TF-IDF (Term Frequency-Inverse Document Frequency):
+```bash
+cd shell
+npm install
+npm run dev        # Dev server on localhost:5173
+npm run build      # Production build → dist/
+npm run lint       # ESLint
+npx tsc --noEmit   # Type check
+```
 
-1. **Embed** — the scenario is embedded locally.
-2. **Retrieve** — cosine similarity selects the top-k most relevant syntax documents.
-3. **Prompt** — the selected docs form the system prompt.
-4. **Generate** — `POST /v1/chat/completions` returns the PlantUML code.
-5. **Render** — the TeaVM engine converts the code to SVG in-browser.
+To regenerate the TF-IDF index after updating the syntax corpus:
 
-
+```bash
+node scripts/generate-embeddings.mjs
+```
