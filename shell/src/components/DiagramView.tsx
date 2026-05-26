@@ -4,10 +4,12 @@ interface TeaVMRenderer {
   render: (lines: string[], elementId: string, options?: { dark?: boolean }) => void
 }
 
-// Dynamic import of public/ asset — resolved at runtime, not bundled
+// Load the TeaVM renderer from public/.
+// We construct a full URL dynamically so Vite doesn't try to statically
+// analyze the import — public/ JS cannot be imported by Vite in dev mode.
 async function loadRenderer(): Promise<TeaVMRenderer> {
-  // @ts-expect-error public/ asset
-  return import(/* @vite-ignore */ '/teavm/js/plantuml.js')
+  const url = self.location.origin + '/teavm/js/plantuml.js'
+  return import(/* @vite-ignore */ url)
 }
 
 interface Props {
