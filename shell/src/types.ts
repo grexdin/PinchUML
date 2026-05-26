@@ -29,6 +29,14 @@ export interface WorkerRequest {
   connection: ConnectionSettings
 }
 
+export interface WorkerRetryRequest {
+  kind: 'retry'
+  scenario: string
+  plantuml: string
+  renderError: string
+  connection: ConnectionSettings
+}
+
 export interface WorkerResponse {
   kind: 'result'
   plantuml: string
@@ -39,5 +47,5 @@ export interface WorkerError {
   message: string
 }
 
-export type WorkerMessage = WorkerRequest
+export type WorkerMessage = WorkerRequest | WorkerRetryRequest
 export type WorkerReply = WorkerResponse | WorkerError

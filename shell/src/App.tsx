@@ -6,7 +6,8 @@ import { PromptInput } from './components/PromptInput'
 import { DiagramView } from './components/DiagramView'
 import './App.css'
 
-const STORAGE_KEY = 'pinchuml-connection'
+const STORAGE_KEY = 'pinchu…tion'
+const MAX_RETRIES = 2
 
 function loadSettings(): ConnectionSettings {
   try {
@@ -27,16 +28,16 @@ export default function App() {
   const [prompt, setPrompt] = useState('')
   const [plantuml, setPlantuml] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const workerRef = useRef<Worker | null>(null)
+  const retryCountRef = useRef(0)
 
-  // Persist connection settings
   const handleConnectionChange = useCallback((s: ConnectionSettings) => {
     setConnection(s)
     saveSettings(s)
   }, [])
 
-  // Create worker lazily
   const getWorker = useCallback(() => {
     if (!workerRef.current) {
       workerRef.current = new Worker(
@@ -47,12 +48,28 @@ export default function App() {
     return workerRef.current
   }, [])
 
-  // Clean up worker on unmount
   useEffect(() => {
     return () => {
       workerRef.current?.terminate()
     }
   }, [])
+
+  // Attach a one-shot message listener to the worker
+  const listenOnce = useCallback((onResult: (plantuml: string) => void) => {
+    const worker = getWorker()
+    const handler = (e: MessageEvent<WorkerReply>) => {
+      worker.removeEventListener('message', handler)
+
+      if (e.data.kind === 'result') {
+        onResult(e.data.plantuml)
+      } else {
+        setError(e.data.message)
+        setLoading(false)
+        setRetrying(false)
+      }
+    }
+    worker.addEventListener('message', handler)
+  }, [getWorker])
 
   const handleGenerate = useCallback(() => {
     const scenario = prompt.trim()
@@ -63,31 +80,54 @@ export default function App() {
     }
 
     setLoading(true)
+    setRetrying(false)
     setError(null)
     setPlantuml(null)
+    retryCountRef.current = 0
 
-    const worker = getWorker()
-
-    const onMessage = (e: MessageEvent<WorkerReply>) => {
-      worker.removeEventListener('message', onMessage)
-
-      if (e.data.kind === 'result') {
-        setPlantuml(e.data.plantuml)
-        setError(null)
-      } else {
-        setError(e.data.message)
-      }
-
+    listenOnce((newPlantuml) => {
+      setPlantuml(newPlantuml)
+      setError(null)
       setLoading(false)
-    }
+      setRetrying(false)
+    })
 
-    worker.addEventListener('message', onMessage)
-    worker.postMessage({
+    getWorker().postMessage({
       kind: 'generate',
       scenario,
       connection,
     })
-  }, [prompt, connection, getWorker])
+  }, [prompt, connection, getWorker, listenOnce])
+
+  const handleRenderError = useCallback((plantumlCode: string, renderError: string) => {
+    if (retryCountRef.current >= MAX_RETRIES) {
+      setError(`Render error persists after ${MAX_RETRIES} attempts: ${renderError}`)
+      setPlantuml(plantumlCode) // keep the last attempt visible in source view
+      setLoading(false)
+      setRetrying(false)
+      return
+    }
+
+    retryCountRef.current++
+    setRetrying(true)
+    setPlantuml(null)
+    setError(null)
+
+    listenOnce((newPlantuml) => {
+      setPlantuml(newPlantuml)
+      setError(null)
+      setLoading(false)
+      setRetrying(false)
+    })
+
+    getWorker().postMessage({
+      kind: 'retry',
+      scenario: prompt.trim(),
+      plantuml: plantumlCode,
+      renderError,
+      connection,
+    })
+  }, [prompt, connection, getWorker, listenOnce])
 
   const handleDemoSelect = useCallback((demo: DemoScenario) => {
     setPrompt(demo.prompt)
@@ -133,7 +173,9 @@ export default function App() {
         <DiagramView
           plantuml={plantuml}
           loading={loading}
+          retrying={retrying}
           error={error}
+          onRenderError={handleRenderError}
         />
       </main>
     </>

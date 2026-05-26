@@ -12,21 +12,45 @@ async function loadRenderer(): Promise<TeaVMRenderer> {
   return import(/* @vite-ignore */ url)
 }
 
+function detectRenderError(container: HTMLElement): string | null {
+  const svg = container.querySelector('svg')
+  if (!svg) return 'No SVG output produced'
+
+  const text = svg.textContent || ''
+
+  // PlantUML errors typically contain "Syntax Error" or "Error:" in the rendered output
+  const syntaxMatch = text.match(/Syntax Error[?:]?\s*(.+?)(?:\n|$)/i)
+  if (syntaxMatch) return syntaxMatch[1].trim() || 'Syntax error in PlantUML code'
+
+  // If there are no diagram shapes, it's likely just an error message
+  const hasShapes = svg.querySelector('path, rect, polygon, ellipse, line, polyline')
+  if (!hasShapes && text.length < 500) {
+    const clean = text.replace(/\s+/g, ' ').trim()
+    if (clean) return clean.slice(0, 300)
+    return 'No diagram elements rendered — possible syntax error'
+  }
+
+  return null
+}
+
 interface Props {
   plantuml: string | null
   loading: boolean
   error: string | null
+  retrying: boolean
+  onRenderError: (plantuml: string, errorMsg: string) => void
 }
 
 type ViewMode = 'diagram' | 'source'
 
-export function DiagramView({ plantuml, loading, error }: Props) {
+export function DiagramView({ plantuml, loading, error, retrying, onRenderError }: Props) {
   const outputId = useId().replace(/:/g, '')
   const [mode, setMode] = useState<ViewMode>('diagram')
   const [copied, setCopied] = useState(false)
   const rendererRef = useRef<((lines: string[], id: string, opts?: { dark?: boolean }) => void) | null>(null)
   const renderedRef = useRef('')
   const preloadStarted = useRef(false)
+  const errorReportedRef = useRef('')
 
   // Preload the TeaVM renderer module on mount
   useEffect(() => {
@@ -48,23 +72,38 @@ export function DiagramView({ plantuml, loading, error }: Props) {
     // Skip if already rendered the same source
     if (plantuml === renderedRef.current && mode === 'diagram') return
     renderedRef.current = plantuml
+    errorReportedRef.current = ''
 
     if (mode !== 'diagram') return
 
     const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
     const lines = plantuml.split('\n')
 
-    // Small delay to ensure DOM is ready after React render
     const timer = setTimeout(() => {
       try {
         rendererRef.current?.(lines, outputId, { dark })
       } catch (err) {
         console.error('Render error:', err)
+        return
       }
+
+      // Check for render errors after a short delay to let the SVG settle
+      setTimeout(() => {
+        const container = document.getElementById(outputId)
+        if (!container) return
+        // Don't double-report the same error
+        if (errorReportedRef.current === plantuml) return
+
+        const renderError = detectRenderError(container)
+        if (renderError) {
+          errorReportedRef.current = plantuml
+          onRenderError(plantuml, renderError)
+        }
+      }, 100)
     }, 50)
 
     return () => clearTimeout(timer)
-  }, [plantuml, mode, outputId])
+  }, [plantuml, mode, outputId, onRenderError])
 
   const handleCopy = useCallback(async () => {
     if (!plantuml) return
@@ -73,7 +112,6 @@ export function DiagramView({ plantuml, loading, error }: Props) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement('textarea')
       textarea.value = plantuml
       document.body.appendChild(textarea)
@@ -90,7 +128,7 @@ export function DiagramView({ plantuml, loading, error }: Props) {
       <div className="diagram-panel">
         <div className="diagram-status">
           <div className="spinner" />
-          <span>Generating diagram…</span>
+          <span>{retrying ? 'Fixing syntax error…' : 'Generating diagram…'}</span>
         </div>
       </div>
     )
